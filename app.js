@@ -4,6 +4,15 @@ import { createSync, takeLinkConfig } from './sync.js';
 
 const KEY = 'tabisen.v1';
 const $ = id => document.getElementById(id);
+// 公開直後は HTML と JS の版が数分だけ食い違うことがある（配信側のキャッシュ）。気づいたら一度だけ読み込み直す
+const APP_VERSION = '5';
+if (document.documentElement.dataset.app !== APP_VERSION && !sessionStorage.getItem('tabisen.reloaded')) {
+  sessionStorage.setItem('tabisen.reloaded', '1');
+  location.reload();
+} else if (document.documentElement.dataset.app === APP_VERSION) {
+  sessionStorage.removeItem('tabisen.reloaded');
+}
+const on = (id, ev, fn, opts) => { const el = $(id); if (el) el.addEventListener(ev, fn, opts); };
 const DOW = ['日', '月', '火', '水', '木', '金', '土'];
 
 // 一日の区切りは朝7時（夜更かしで0時を回っても「今日」のまま）
@@ -106,7 +115,7 @@ function showToast(text, undoable = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, undoable ? 8000 : 4000);
 }
-$('toast-undo').addEventListener('click', () => {
+on('toast-undo', 'click', () => {
   if (!undoSnapshot) return;
   state = undoSnapshot; undoSnapshot = null;
   save(); render();
@@ -114,7 +123,7 @@ $('toast-undo').addEventListener('click', () => {
 });
 
 // ---- 付箋を貼る ----
-$('add-form').addEventListener('submit', e => {
+on('add-form', 'submit', e => {
   e.preventDefault();
   const input = $('new-text');
   const text = input.value.trim();
@@ -125,7 +134,7 @@ $('add-form').addEventListener('submit', e => {
   input.value = '';
   input.focus();
 });
-$('new-text').addEventListener('input', () => { $('new-error').textContent = ''; $('new-text').removeAttribute('aria-invalid'); });
+on('new-text', 'input', () => { $('new-error').textContent = ''; $('new-text').removeAttribute('aria-invalid'); });
 
 const SAMPLE = [
   { text: '金沢で寿司とひがし茶屋街', stars: 3, days: '2', color: 'yellow' },
@@ -137,7 +146,7 @@ const SAMPLE = [
   { text: '鎌倉を歩いてしらす丼', stars: 1, days: 'day', color: 'mint' },
   { text: '北海道でスキー', stars: 2, days: '2', color: 'sky' },
 ];
-$('add-sample').addEventListener('click', () => {
+on('add-sample', 'click', () => {
   let s = state;
   for (const n of SAMPLE) s = L.addNote(s, n);
   commit(s, { toast: 'サンプルの付箋を貼りました' });
@@ -166,7 +175,7 @@ document.addEventListener('click', e => {
     if (laneBtn.dataset.laneAction === 'remove') commit(L.removeCustomLane(state, laneId), { undoable: true, toast: `${title} を消しました${tail}` });
   }
 }, true);
-$('unhide-all').addEventListener('click', () => { $('settings').close(); commit(L.unhideAll(state), { toast: '隠した休みを戻しました' }); });
+on('unhide-all', 'click', () => { $('settings').close(); commit(L.unhideAll(state), { toast: '隠した休みを戻しました' }); });
 
 // ---- 編集シート ----
 function openEditor(id) {
@@ -190,7 +199,7 @@ function openEditor(id) {
   $('editor').showModal();
   $('ed-text').focus();
 }
-$('editor-form').addEventListener('submit', e => {
+on('editor-form', 'submit', e => {
   e.preventDefault();
   const n = state.notes.find(x => x.id === editingId);
   if (!n) { $('editor').close(); return; }
@@ -210,7 +219,7 @@ $('editor-form').addEventListener('submit', e => {
   $('editor').close();
   commit(s);
 });
-$('ed-delete').addEventListener('click', () => {
+on('ed-delete', 'click', () => {
   const n = state.notes.find(x => x.id === editingId);
   $('editor').close();
   if (n) commit(L.deleteNote(state, editingId), { undoable: true, toast: `「${n.text}」を消しました` });
@@ -226,8 +235,8 @@ function openLaneEditor() {
   $('lane-editor').showModal();
   $('ln-start').focus();
 }
-$('add-lane').addEventListener('click', openLaneEditor);
-$('lane-form').addEventListener('submit', e => {
+on('add-lane', 'click', openLaneEditor);
+on('lane-form', 'submit', e => {
   e.preventDefault();
   const label = $('ln-label').value.trim();
   const start = $('ln-start').value, end = $('ln-end').value;
@@ -237,18 +246,18 @@ $('lane-form').addEventListener('submit', e => {
   const lane = next.customLanes.at(-1);
   commit(next, { toast: `${L.laneTitle({ ...lane, kind: 'custom' }, today).title} を足しました` });
 });
-$('ed-lanes').addEventListener('change', e => {
+on('ed-lanes', 'change', e => {
   if (e.target.name !== 'lane') return;
   $('ed-dates').hidden = e.target.value !== '__dates__';
   if (!$('ed-dates').hidden) $('ed-start').focus();
 });
 
 // ---- 設定シート ----
-$('open-settings').addEventListener('click', () => { $('clear-confirm').hidden = true; $('settings').showModal(); });
-$('import-btn').addEventListener('click', () => $('import-file').click());
+on('open-settings', 'click', () => { $('clear-confirm').hidden = true; $('settings').showModal(); });
+on('import-btn', 'click', () => $('import-file').click());
 
 // ---- コピー・控え ----
-$('export').addEventListener('click', () => {
+on('export', 'click', () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -256,7 +265,7 @@ $('export').addEventListener('click', () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
-$('import-file').addEventListener('change', e => {
+on('import-file', 'change', e => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -267,9 +276,9 @@ $('import-file').addEventListener('change', e => {
   };
   reader.readAsText(file);
 });
-$('clear-all').addEventListener('click', () => { $('clear-confirm').hidden = false; $('clear-yes').focus(); });
-$('clear-no').addEventListener('click', () => { $('clear-confirm').hidden = true; $('clear-all').focus(); });
-$('clear-yes').addEventListener('click', () => { $('clear-confirm').hidden = true; $('settings').close(); commit(L.emptyState(), { undoable: true, toast: 'すべて消しました' }); });
+on('clear-all', 'click', () => { $('clear-confirm').hidden = false; $('clear-yes').focus(); });
+on('clear-no', 'click', () => { $('clear-confirm').hidden = true; $('clear-all').focus(); });
+on('clear-yes', 'click', () => { $('clear-confirm').hidden = true; $('settings').close(); commit(L.emptyState(), { undoable: true, toast: 'すべて消しました' }); });
 
 // ---- ドラッグ（PC はそのまま、タッチは長押しで始める） ----
 let drag = null;
@@ -387,7 +396,7 @@ const sync = createSync({
     if (st.state === 'error') showToast(`同期できませんでした: ${st.message}`);
   },
 });
-$('sync-form').addEventListener('submit', async e => {
+on('sync-form', 'submit', async e => {
   e.preventDefault();
   const btn = $('sync-connect'); const err = $('sync-error');
   err.textContent = ''; $('sync-token').removeAttribute('aria-invalid');
@@ -400,9 +409,9 @@ $('sync-form').addEventListener('submit', async e => {
     err.textContent = ex.message; $('sync-token').setAttribute('aria-invalid', 'true');
   } finally { btn.disabled = false; btn.textContent = 'つなぐ'; }
 });
-$('sync-now').addEventListener('click', () => sync.sync());
-$('sync-disconnect').addEventListener('click', () => { sync.disconnect(); showToast('同期をやめました。トークンはこの端末から消しました'); });
-$('sync-link').addEventListener('click', async () => {
+on('sync-now', 'click', () => sync.sync());
+on('sync-disconnect', 'click', () => { sync.disconnect(); showToast('同期をやめました。トークンはこの端末から消しました'); });
+on('sync-link', 'click', async () => {
   try { await navigator.clipboard.writeText(sync.link()); showToast('リンクをコピーしました。自分の別の端末で開いてください'); }
   catch (e) { showToast('コピーできませんでした'); }
 });
@@ -423,7 +432,7 @@ document.addEventListener('visibilitychange', () => {
   if (L.ymd(t) !== L.ymd(today)) { today = t; render(); }
 });
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 }
 // ブラウザに「この保存領域は消さないで」と頼む（容量不足のときの自動削除を防ぐ。対応していない端末では何もしない）
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
