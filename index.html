@@ -14,9 +14,6 @@
 <link rel="icon" href="icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,21 +30,20 @@
   </header>
 
   <main>
-    <!-- ===== 決まった旅（決まったときだけ出る） ===== -->
+    <!-- ===== Plans（決まったときだけ出る） ===== -->
     <section class="decided" id="decided-section" aria-labelledby="decided-title" hidden>
       <div class="section-head">
-        <h2 class="section-title" id="decided-title">決まった旅</h2>
+        <h2 class="section-title" id="decided-title">Plans</h2>
         <button type="button" class="btn btn-tertiary btn-sm" id="copy-decided">文面をコピー</button>
       </div>
       <ol class="decided-list" id="decided-list"></ol>
     </section>
 
     <div class="board">
-      <!-- ===== 付箋の壁 ===== -->
+      <!-- ===== Ideas ===== -->
       <section class="wall" aria-labelledby="wall-title" data-drop="">
         <div class="section-head">
-          <h2 class="section-title" id="wall-title">付箋の壁</h2>
-          <span class="count" id="wall-count"></span>
+          <h2 class="section-title" id="wall-title">Ideas<span class="count" id="wall-count"></span></h2>
         </div>
         <form class="add-form" id="add-form" novalidate>
           <label for="new-text">行きたい場所・やりたいこと<span class="req">（必須）</span></label>
@@ -59,33 +55,27 @@
         </form>
         <ul class="notes wall-notes" id="wall" aria-label="まだ休みを決めていない付箋"></ul>
         <div class="empty" id="wall-empty" hidden>
-          <p>まだ付箋がありません。思いつくまま、行きたい場所ややりたいことを貼ってみてください。</p>
+          <p>まだ付箋がありません。行きたい場所ややりたいことを、思いつくまま貼ってみてください。貼った付箋は押すと直せて、休みの列へ動かせます。</p>
           <button type="button" class="btn btn-secondary btn-sm" id="add-sample">サンプルを入れる</button>
         </div>
-        <p class="help hint-drag">付箋を押すと直せます。PC ではそのまま、スマホでは長押しで、休みの列へ引っぱれます。</p>
       </section>
 
-      <!-- ===== いつ行く？ ===== -->
+      <!-- ===== Holidays ===== -->
       <section class="when" aria-labelledby="when-title">
         <div class="section-head">
-          <h2 class="section-title" id="when-title">いつ行く？</h2>
+          <h2 class="section-title" id="when-title">Holidays</h2>
+          <button type="button" class="btn btn-secondary btn-sm" id="add-lane" aria-haspopup="dialog">＋ 日付を選ぶ</button>
         </div>
-        <p class="help">祝日から、次の1年の連休（3日以上）を自動で並べています。好きな日程は「日付を選んで足す」で加えられます。</p>
         <div class="lanes" id="lanes" aria-label="休みの一覧"></div>
-        <p class="help hidden-info" id="hidden-info" hidden><span id="hidden-count"></span><button type="button" class="link" id="unhide-all">隠した休みを全部戻す</button></p>
       </section>
     </div>
 
-    <!-- ===== 行った旅 ===== -->
+    <!-- ===== Past Trips ===== -->
     <section class="archive" id="archive-section" aria-labelledby="archive-title" hidden>
-      <h2 class="section-title" id="archive-title">行った旅</h2>
+      <h2 class="section-title" id="archive-title">Past Trips</h2>
       <ul class="archive-list" id="archive-list"></ul>
     </section>
   </main>
-
-  <footer class="app-footer">
-    <p>旅箋 TABISEN — 付箋で決める旅の計画ボード</p>
-  </footer>
 </div>
 
 <!-- 付箋の編集シート -->
@@ -203,6 +193,11 @@
         <input type="file" id="import-file" accept="application/json,.json" hidden>
       </div>
     </section>
+    <section class="settings-group" id="hidden-group" aria-labelledby="settings-hidden" hidden>
+      <h3 class="settings-label" id="settings-hidden">隠した休み</h3>
+      <p class="help" id="hidden-count"></p>
+      <button type="button" class="btn btn-secondary" id="unhide-all">隠した休みを全部戻す</button>
+    </section>
     <section class="settings-group" aria-labelledby="settings-clear">
       <h3 class="settings-label" id="settings-clear">すべて消す</h3>
       <p class="help">付箋・休み・行った旅をすべて消します。控えを書き出していない場合は元に戻せません。</p>
@@ -217,7 +212,9 @@
     </section>
     <section class="settings-group" aria-labelledby="settings-about">
       <h3 class="settings-label" id="settings-about">このアプリについて</h3>
-      <p class="help">旅箋 TABISEN。行き先を選ぶのではなく、休みに貼る。付箋を次の連休に貼っていくと、いつ・どこへ行くかが決まります。</p>
+      <p class="help">行き先を選ぶのではなく、休みに貼る。Ideas の付箋を Holidays の列へ動かし、「これで決定」を押すと Plans に並びます。</p>
+      <p class="help">Holidays には、祝日から次の1年の連休（3日以上）を自動で並べています。好きな日程は「＋ 日付を選ぶ」で足せます。列の右上の × で隠せます。</p>
+      <p class="help">付箋は押すと直せます。PC ではドラッグ、スマホでは長押しで列へ動かせます。</p>
     </section>
   </div>
 </dialog>

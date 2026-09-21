@@ -52,22 +52,29 @@ function noteHtml(n, ctx) {
   </li>`;
 }
 
+const X_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 function laneHtml(lane) {
   const t = L.laneTitle(lane, today);
   const notes = state.notes.filter(n => n.laneId === lane.id);
   const winner = notes.find(n => n.decided);
   const rest = notes.filter(n => !n.decided);
-  const isNow = lane.kind === 'auto' && lane.start <= L.ymd(today) && lane.end >= L.ymd(today);
-  const badge = winner ? '<span class="lane-badge">決定ずみ</span>' : isNow ? '<span class="lane-badge is-now">いまの休み</span>' : '';
-  const foot = lane.kind === 'auto' ? `<button type="button" class="btn btn-tertiary btn-sm" data-lane-action="hide">この休みは使わない</button>`
-    : lane.kind === 'custom' ? `<button type="button" class="btn btn-tertiary btn-sm" data-lane-action="remove">この休みを消す</button>` : '';
+  const key = L.ymd(today);
+  const isNow = !!(lane.start && lane.end && lane.start <= key && lane.end >= key);
+  const flag = winner ? '<span class="lane-flag">決定ずみ</span>' : isNow ? '<span class="lane-flag">いまの休み</span>' : '';
+  const hide = lane.kind === 'auto'
+    ? `<button type="button" class="lane-hide" data-lane-action="hide" aria-label="この休みを隠す" title="この休みを隠す">${X_ICON}</button>`
+    : `<button type="button" class="lane-hide" data-lane-action="remove" aria-label="この休みを消す" title="この休みを消す">${X_ICON}</button>`;
   const body = notes.length
     ? (winner ? noteHtml(winner, 'lane') : '') + rest.map(n => noteHtml(n, 'lane')).join('')
-    : `<p class="lane-empty">${lane.kind === 'someday' ? '時期が決まらない候補はここへ' : 'ここに付箋を貼る'}</p>`;
-  return `<section class="lane${isNow ? ' is-now' : ''}${lane.kind === 'someday' ? ' is-someday' : ''}" data-drop="${lane.id}" aria-label="${esc(t.title)}">
-    <header class="lane-head">${badge}<h3 class="lane-title">${esc(t.title)}</h3><span class="lane-sub">${esc(t.sub)}</span></header>
+    : '<li class="lane-empty">付箋をここへ</li>';
+  return `<section class="lane${isNow ? ' is-now' : ''}${winner ? ' is-decided' : ''}" data-drop="${lane.id}" aria-label="${esc(t.title)} ${esc(t.eyebrow)}">
+    <header class="lane-head">
+      <p class="lane-eyebrow">${flag}${esc(t.eyebrow)}</p>
+      <h3 class="lane-title">${esc(t.title)}</h3>
+      ${t.sub ? `<p class="lane-sub">${esc(t.sub)}</p>` : ''}
+      ${hide}
+    </header>
     <ul class="lane-body notes">${body}</ul>
-    ${foot ? `<div class="lane-foot">${foot}</div>` : ''}
   </section>`;
 }
 
@@ -85,7 +92,8 @@ function render() {
     if (!n) continue;
     const t = L.laneTitle(lane, today);
     const days = L.DAYS_LABEL[n.days];
-    decidedItems.push(`<li class="decided-item"><span class="decided-when">${esc(t.title)}<span class="decided-sub">${esc(t.sub)}</span></span><span class="decided-what">${esc(n.text)}${days ? `<span class="decided-days">${esc(days)}</span>` : ''}</span></li>`);
+    const sub = [t.eyebrow, t.sub].filter(Boolean).join('・');
+    decidedItems.push(`<li class="decided-item"><span class="decided-when"><span class="decided-title">${esc(t.title)}</span><span class="decided-sub">${esc(sub)}</span></span><span class="decided-what">${esc(n.text)}${days ? `<span class="decided-days">${esc(days)}</span>` : ''}</span></li>`);
   }
   $('decided-list').innerHTML = decidedItems.join('');
   $('decided-section').hidden = decidedItems.length === 0;
@@ -93,18 +101,17 @@ function render() {
   // 壁
   const wallNotes = state.notes.filter(n => !n.laneId);
   $('wall').innerHTML = wallNotes.map(n => noteHtml(n, 'wall')).join('');
-  $('wall-count').textContent = wallNotes.length ? `${wallNotes.length}枚` : '';
+  $('wall-count').textContent = wallNotes.length ? String(wallNotes.length) : '';
   $('wall-empty').hidden = state.notes.length > 0;
 
   // 休みの列（横スクロール位置は保つ）
   const lanesEl = $('lanes');
   const sl = lanesEl.scrollLeft;
-  const addCard = `<button type="button" class="lane-add" id="lane-add-card" aria-haspopup="dialog"><span class="lane-add-plus" aria-hidden="true">＋</span><span class="lane-add-title">日付を選んで足す</span><span class="lane-add-sub">有休・週末・好きな日程</span></button>`;
-  lanesEl.innerHTML = addCard + lanes.map(laneHtml).join('');
+  lanesEl.innerHTML = lanes.map(laneHtml).join('');
   lanesEl.scrollLeft = sl;
   const hidden = state.hiddenLanes.length;
-  $('hidden-info').hidden = hidden === 0;
-  $('hidden-count').textContent = hidden ? `隠した休み ${hidden}件` : '';
+  $('hidden-group').hidden = hidden === 0;
+  $('hidden-count').textContent = hidden ? `× で隠した休みが ${hidden}件あります。戻すと Holidays に再び並びます。` : '';
 
   // 行った旅
   $('archive-section').hidden = state.archive.length === 0;
@@ -173,7 +180,7 @@ document.addEventListener('click', e => {
       const note = state.notes.find(n => n.id === id);
       if (!lane || !note) return;
       const returned = state.notes.filter(n => n.laneId === lane.id && n.id !== id).length;
-      commit(L.decideNote(state, id, lane), { undoable: true, toast: `${L.laneTitle(lane).title} は「${note.text}」に決定${returned ? `。他の${returned}枚は壁へ戻しました` : ''}` });
+      commit(L.decideNote(state, id, lane), { undoable: true, toast: `${L.laneTitle(lane, today).title} は「${note.text}」に決定${returned ? `。他の${returned}枚は Ideas へ戻しました` : ''}` });
     }
     if (action === 'undecide') commit(L.undecideNote(state, id), { toast: '決定を取り消しました' });
     return;
@@ -183,12 +190,13 @@ document.addEventListener('click', e => {
     const laneId = laneBtn.closest('[data-drop]').dataset.drop;
     const lane = lanes.find(l => l.id === laneId);
     const moved = state.notes.filter(n => n.laneId === laneId).length;
-    const tail = moved ? `。付箋${moved}枚は壁へ戻しました` : '';
-    if (laneBtn.dataset.laneAction === 'hide') commit(L.hideLane(state, laneId), { undoable: true, toast: `${L.laneTitle(lane).title} を隠しました${tail}` });
-    if (laneBtn.dataset.laneAction === 'remove') commit(L.removeCustomLane(state, laneId), { undoable: true, toast: `「${lane.label}」を消しました${tail}` });
+    const tail = moved ? `。付箋${moved}枚は Ideas へ戻しました` : '';
+    const title = L.laneTitle(lane, today).title;
+    if (laneBtn.dataset.laneAction === 'hide') commit(L.hideLane(state, laneId), { undoable: true, toast: `${title} を隠しました（設定から戻せます）${tail}` });
+    if (laneBtn.dataset.laneAction === 'remove') commit(L.removeCustomLane(state, laneId), { undoable: true, toast: `${title} を消しました${tail}` });
   }
 }, true);
-$('unhide-all').addEventListener('click', () => commit(L.unhideAll(state), { toast: '隠した休みを戻しました' }));
+$('unhide-all').addEventListener('click', () => { $('settings').close(); commit(L.unhideAll(state), { toast: '隠した休みを戻しました' }); });
 
 // ---- 編集シート ----
 function openEditor(id) {
@@ -200,10 +208,11 @@ function openEditor(id) {
   document.querySelector(`#ed-colors input[value="${n.color}"]`).checked = true;
   document.querySelector(`#editor-form input[name="stars"][value="${n.stars}"]`).checked = true;
   document.querySelector(`#editor-form input[name="days"][value="${n.days}"]`).checked = true;
-  const chips = [`<label class="chip"><input type="radio" name="lane" value=""${!n.laneId ? ' checked' : ''}>壁に置いておく</label>`];
+  const chips = [`<label class="chip"><input type="radio" name="lane" value=""${!n.laneId ? ' checked' : ''}>まだ決めない<small>Ideas に置いておく</small></label>`];
   for (const lane of lanes) {
     const t = L.laneTitle(lane, today);
-    chips.push(`<label class="chip"><input type="radio" name="lane" value="${lane.id}"${n.laneId === lane.id ? ' checked' : ''}>${esc(t.title)}<small>${esc(t.sub)}</small></label>`);
+    const sub = [t.eyebrow, t.sub].filter(Boolean).join('・');
+    chips.push(`<label class="chip"><input type="radio" name="lane" value="${lane.id}"${n.laneId === lane.id ? ' checked' : ''}>${esc(t.title)}<small>${esc(sub)}</small></label>`);
   }
   chips.push('<label class="chip"><input type="radio" name="lane" value="__dates__">日付を選んで貼る<small>好きな日程で新しい休みを作る</small></label>');
   $('ed-lanes').innerHTML = chips.join('');
@@ -247,7 +256,7 @@ function openLaneEditor() {
   $('lane-editor').showModal();
   $('ln-start').focus();
 }
-$('lanes').addEventListener('click', e => { if (e.target.closest('.lane-add')) openLaneEditor(); });
+$('add-lane').addEventListener('click', openLaneEditor);
 $('lane-form').addEventListener('submit', e => {
   e.preventDefault();
   const label = $('ln-label').value.trim();
@@ -256,7 +265,7 @@ $('lane-form').addEventListener('submit', e => {
   const next = L.addCustomLane(state, { label, start, end });
   $('lane-editor').close();
   const lane = next.customLanes.at(-1);
-  commit(next, { toast: `${L.laneTitle({ ...lane, kind: 'custom' }).title} を足しました` });
+  commit(next, { toast: `${L.laneTitle({ ...lane, kind: 'custom' }, today).title} を足しました` });
 });
 $('ed-lanes').addEventListener('change', e => {
   if (e.target.name !== 'lane') return;
@@ -365,7 +374,7 @@ function endDrag(drop) {
   const note = state.notes.find(n => n.id === id);
   if (!note || note.laneId === laneId) return;
   const lane = lanes.find(l => l.id === laneId);
-  commit(L.moveNote(state, id, laneId), { toast: laneId ? `「${note.text}」を ${L.laneTitle(lane).title} に貼りました` : `「${note.text}」を壁へ戻しました` });
+  commit(L.moveNote(state, id, laneId), { toast: laneId ? `「${note.text}」を ${L.laneTitle(lane, today).title} に貼りました` : `「${note.text}」を Ideas へ戻しました` });
 }
 document.addEventListener('pointerdown', e => {
   const body = e.target.closest('.note-body');

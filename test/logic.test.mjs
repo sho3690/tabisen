@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  jpHolidays, holidayWindows, formatRange, buildLanes, laneTitle, decidedText,
+  jpHolidays, holidayWindows, formatRange, dowRange, buildLanes, laneTitle, laneLabel, decidedText,
   emptyState, addNote, updateNote, deleteNote, moveNote, decideNote, undecideNote,
   hideLane, addCustomLane, removeCustomLane, findDateLane, expire, parseImport,
 } from '../logic.js';
@@ -52,13 +52,15 @@ test('連休の列挙: 今日を含む連休は丸ごと、過ぎたものは出
   assert.ok(w.every(x => x.end >= '2026-09-21'));
 });
 
-test('formatRange', () => {
-  assert.equal(formatRange('2026-10-10', '2026-10-12'), '10/10(土)〜12(月)');
-  assert.equal(formatRange('2026-12-26', '2027-01-03'), '12/26(土)〜1/3(日)');
-  assert.equal(formatRange('2026-11-03', '2026-11-03'), '11/3(火)');
+test('formatRange / dowRange: 数字が主役、曜日は別', () => {
+  assert.equal(formatRange('2026-10-10', '2026-10-12'), '10/10–12');
+  assert.equal(formatRange('2026-12-26', '2027-01-03'), '12/26–1/3');
+  assert.equal(formatRange('2026-11-03', '2026-11-03'), '11/3');
+  assert.equal(dowRange('2026-10-10', '2026-10-12'), '土〜月');
+  assert.equal(dowRange('2026-11-03', '2026-11-03'), '火');
 });
 
-test('buildLanes: 自動 + 自分の休み + いつか、時系列、非表示を除く', () => {
+test('buildLanes: 自動 + 自分の休み、時系列、非表示を除く（「いつか」は無い）', () => {
   let s = emptyState();
   s = addCustomLane(s, { label: '有休をとって平日', start: '2026-10-28', end: '2026-10-30' });
   s = addCustomLane(s, { label: '日程はこれから' });
@@ -69,13 +71,16 @@ test('buildLanes: 自動 + 自分の休み + いつか、時系列、非表示�
   const i1 = lanes.findIndex(l => l.label === '有休をとって平日');
   const iNov = lanes.findIndex(l => l.id === 'auto:2026-11-21');
   assert.ok(i1 > 0 && i1 < iNov, '日付つきの自分の休みは日付順に混ざる');
-  assert.equal(lanes.at(-1).id, 'someday');
-  assert.equal(lanes.at(-2).label, '日程はこれから');
-  const t = laneTitle(lanes[0]);
-  assert.equal(t.title, '9/19(土)〜23(水)');
-  assert.equal(t.sub, '5連休・敬老の日・秋分の日');
-  const y = laneTitle(lanes.find(l => l.id === 'auto:2026-12-29'));
-  assert.equal(y.sub, '年末年始・6連休');
+  assert.ok(!lanes.some(l => l.kind === 'someday'));
+  assert.equal(lanes.at(-1).label, '日程はこれから');
+  assert.deepEqual(laneTitle(lanes.at(-1)), { eyebrow: '日程は未定', title: '日程はこれから', sub: '' });
+  const t = laneTitle(lanes[0], d('2026-09-21'));
+  assert.deepEqual(t, { eyebrow: '土〜水・5連休', title: '9/19–23', sub: '敬老の日・秋分の日' });
+  const y = laneTitle(lanes.find(l => l.id === 'auto:2026-12-29'), d('2026-09-21'));
+  assert.deepEqual(y, { eyebrow: '火〜日・6連休', title: '12/29–1/3', sub: '年末年始' });
+  const gw = laneTitle(lanes.find(l => l.id === 'auto:2027-05-01'), d('2026-09-21'));
+  assert.equal(gw.eyebrow, '2027・土〜水・5連休');
+  assert.equal(laneLabel(lanes[0], d('2026-09-21')), '9/19–23（土〜水・5連休）');
 });
 
 test('付箋の追加・更新・移動・決定・取り消し・削除', () => {
@@ -93,7 +98,7 @@ test('付箋の追加・更新・移動・決定・取り消し・削除', () =>
   const lane = { id: 'auto:2026-10-10', start: '2026-10-10', end: '2026-10-12', days: 3, names: ['スポーツの日'], kind: 'auto' };
   s = decideNote(s, kanazawa.id, lane);
   assert.equal(s.notes[0].decided, true);
-  assert.equal(s.notes[0].decidedLabel, '10/10(土)〜12(月)');
+  assert.equal(s.notes[0].decidedLabel, '10/10–12（土〜月・3連休）');
   assert.equal(s.notes[1].laneId, null, '同じ休みの他の付箋は壁へ戻る');
   s = moveNote(s, hakone.id, 'auto:2026-10-10');
   assert.equal(s.notes[1].laneId, 'auto:2026-10-10', '決定後も候補は貼れる');
@@ -134,7 +139,7 @@ test('expire: 過ぎた休みは、決定済みなら行った旅へ、未決定
   assert.equal(s.notes[0].laneId, null);
   assert.equal(s.archive.length, 1);
   assert.equal(s.archive[0].text, '金沢');
-  assert.equal(s.archive[0].label, '9/19(土)〜23(水)');
+  assert.equal(s.archive[0].label, '9/19–23（土〜水・5連休）');
 });
 
 test('decidedText: コピー用の文面', () => {
@@ -144,7 +149,7 @@ test('decidedText: コピー用の文面', () => {
   s = moveNote(s, s.notes[0].id, lane.id);
   s = decideNote(s, s.notes[0].id, lane);
   const lanes = buildLanes(s, d('2026-09-21'));
-  assert.equal(decidedText(s, lanes), '10/10(土)〜12(月)　金沢（2泊）');
+  assert.equal(decidedText(s, lanes), '10/10–12（土〜月・3連休）　金沢（2泊）');
 });
 
 test('parseImport: 壊れたデータは受け付けない', () => {
@@ -163,9 +168,8 @@ test('日付だけの休み: 名前が空なら日付が名前になる。同じ
   s = addCustomLane(s, { label: '', start: '', end: '' });  // 何も無い → 無視
   assert.equal(s.customLanes.length, 2);
   const lanes = buildLanes(s, d('2026-09-21'));
-  const t = laneTitle(lanes.find(l => l.id === s.customLanes[0].id));
-  assert.equal(t.title, '9/23(水)〜26(土)');
-  assert.equal(t.sub, '4日間・自分で選んだ日程');
+  const t = laneTitle(lanes.find(l => l.id === s.customLanes[0].id), d('2026-09-21'));
+  assert.deepEqual(t, { eyebrow: '水〜土・4日間', title: '9/23–26', sub: '自分で選んだ日程' });
   assert.equal(findDateLane(s, '2026-09-23', '2026-09-26').id, s.customLanes[0].id);
   assert.equal(findDateLane(s, '2026-09-23', '').id, s.customLanes[1].id);
   assert.equal(findDateLane(s, '2026-10-01', '2026-10-02'), null);

@@ -1,6 +1,6 @@
 // 旅箋 TABISEN — オフラインでも開けるようにする小さな仕組み。
 // 自分のファイルはネットワーク優先、つながらないときだけ保存済みのものを出す。
-const VERSION = 'tabisen-v1';
+const VERSION = 'tabisen-v2';
 const SHELL = ['./', './index.html', './style.css', './app.js', './logic.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,8 +17,5 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(req).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; })
       .catch(() => caches.match(req).then(r => r || (req.mode === 'navigate' ? caches.match('./index.html') : undefined))));
     return;
-  }
-  if (/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
-    e.respondWith(caches.match(req).then(r => r || fetch(req).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; })));
   }
 });

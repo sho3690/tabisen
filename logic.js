@@ -77,31 +77,35 @@ export function holidayWindows(today, months = 12, minDays = 3) {
 }
 
 // ---- 表示用の文字列 ----
+// 数字を主役にした日付: 9/19–23 / 12/29–1/3 / 11/3
 export function formatRange(start, end) {
   const a = parseYmd(start), b = parseYmd(end);
-  const md = x => `${x.getMonth() + 1}/${x.getDate()}(${DOW[x.getDay()]})`;
-  if (start === end) return md(a);
-  const bTxt = a.getMonth() === b.getMonth() ? `${b.getDate()}(${DOW[b.getDay()]})` : md(b);
-  return `${md(a)}〜${bTxt}`;
+  if (start === end) return `${a.getMonth() + 1}/${a.getDate()}`;
+  const bTxt = a.getMonth() === b.getMonth() ? `${b.getDate()}` : `${b.getMonth() + 1}/${b.getDate()}`;
+  return `${a.getMonth() + 1}/${a.getDate()}–${bTxt}`;
 }
+// 曜日の範囲: 土〜水 / 火
+export function dowRange(start, end) {
+  const a = DOW[parseYmd(start).getDay()], b = DOW[parseYmd(end).getDay()];
+  return start === end ? a : `${a}〜${b}`;
+}
+// 列の見出し: eyebrow（小さな前置き）/ title（大きな数字）/ sub（祝日名や名前）
 export function laneTitle(lane, today) {
-  if (lane.kind === 'someday') return { title: 'いつか', sub: '時期は未定' };
-  const yearNote = today && lane.start && lane.start.slice(0, 4) !== ymd(today).slice(0, 4) ? `${lane.start.slice(0, 4)}年・` : '';
+  const year = today && lane.start && lane.start.slice(0, 4) !== ymd(today).slice(0, 4) ? [lane.start.slice(0, 4)] : [];
   if (lane.kind === 'custom') {
-    if (!lane.start) return { title: lane.label, sub: '日程は未定' };
+    if (!lane.start) return { eyebrow: '日程は未定', title: lane.label, sub: '' };
     const n = Math.round((parseYmd(lane.end) - parseYmd(lane.start)) / 86400000) + 1;
-    if (!lane.label) return { title: formatRange(lane.start, lane.end), sub: `${yearNote}${n}日間・自分で選んだ日程` };
-    return { title: lane.label, sub: `${yearNote}${formatRange(lane.start, lane.end)}・${n}日間` };
+    return { eyebrow: [...year, dowRange(lane.start, lane.end), `${n}日間`].join('・'), title: formatRange(lane.start, lane.end), sub: lane.label || '自分で選んだ日程' };
   }
-  const sub = lane.tag ? `${lane.tag}・${lane.days}連休` : [`${lane.days}連休`, ...lane.names].join('・');
-  return { title: formatRange(lane.start, lane.end), sub: yearNote + sub };
+  return { eyebrow: [...year, dowRange(lane.start, lane.end), `${lane.days}連休`].join('・'), title: formatRange(lane.start, lane.end), sub: lane.tag || lane.names.join('・') };
 }
+export const laneLabel = (lane, today) => { const t = laneTitle(lane, today); return t.eyebrow && t.eyebrow !== '日程は未定' ? `${t.title}（${t.eyebrow}）` : t.title; };
 
 // ---- 状態 ----
 export const emptyState = () => ({ version: 1, notes: [], customLanes: [], hiddenLanes: [], archive: [] });
 let seq = 0;
 const uid = p => `${p}${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const randomRot = () => Math.round((Math.random() * 4 - 2) * 2) / 2;
+const randomRot = () => Math.round((Math.random() * 3 - 1.5) * 2) / 2;
 
 function normalizeNote(n) {
   return {
@@ -126,7 +130,7 @@ export function buildLanes(state, today) {
   const custom = state.customLanes.map(c => ({ ...c, kind: 'custom' })).filter(c => !c.end || c.end >= todayKey);
   const dated = [...auto, ...custom.filter(c => c.start)].sort((a, b) => a.start.localeCompare(b.start));
   const undated = custom.filter(c => !c.start);
-  return [...dated, ...undated, { id: 'someday', kind: 'someday' }];
+  return [...dated, ...undated];
 }
 
 export function addNote(state, fields) {
@@ -144,7 +148,7 @@ export function moveNote(state, id, laneId) {
   return { ...state, notes: state.notes.map(n => (n.id === id ? { ...n, laneId: laneId || null, decided: false, decidedLabel: '' } : n)) };
 }
 export function decideNote(state, id, lane) {
-  const label = laneTitle(lane).title;
+  const label = laneLabel(lane);
   return {
     ...state,
     notes: state.notes.map(n => {
@@ -204,7 +208,7 @@ export function decidedText(state, lanes) {
     const n = state.notes.find(x => x.decided && x.laneId === lane.id);
     if (!n) continue;
     const days = DAYS_LABEL[n.days] ? `（${DAYS_LABEL[n.days]}）` : '';
-    lines.push(`${laneTitle(lane).title}　${n.text}${days}`);
+    lines.push(`${laneLabel(lane)}　${n.text}${days}`);
   }
   return lines.join('\n');
 }
