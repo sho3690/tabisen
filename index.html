@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8f9fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#212529" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="旅箋">
+<meta name="description" content="行きたい場所を付箋にして、次の連休に貼る。いつ・どこへ行くかが決まる旅の計画ボード。データは端末の中だけに保存します。">
+<title>旅箋 TABISEN</title>
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="app-header">
+    <h1 class="app-title">旅箋<small>TABISEN</small></h1>
+    <p class="app-date" id="today-label"></p>
+  </header>
+
+  <main>
+    <p class="lead">行き先を選ぶのではなく、<strong>休みに貼る</strong>。頭の中の候補を付箋にして、次の連休に貼っていくと、いつ・どこへ行くかが決まります。</p>
+
+    <!-- ===== 決まった旅 ===== -->
+    <section class="decided" aria-labelledby="decided-title">
+      <div class="section-head">
+        <h2 class="section-title" id="decided-title">決まった旅</h2>
+        <button type="button" class="btn btn-tertiary btn-sm" id="copy-decided" hidden>文面をコピー</button>
+      </div>
+      <ol class="decided-list" id="decided-list"></ol>
+      <p class="help" id="decided-empty">まだありません。休みの列に付箋を貼って「これで決定」を押すと、ここに並びます。</p>
+    </section>
+
+    <div class="board">
+      <!-- ===== 付箋の壁 ===== -->
+      <section class="wall" aria-labelledby="wall-title" data-drop="">
+        <div class="section-head">
+          <h2 class="section-title" id="wall-title">付箋の壁</h2>
+          <span class="count" id="wall-count"></span>
+        </div>
+        <form class="add-form" id="add-form" novalidate>
+          <label for="new-text">行きたい場所・やりたいこと<span class="req">（必須）</span></label>
+          <div class="add-row">
+            <input class="input" id="new-text" name="text" type="text" autocomplete="off" maxlength="60" placeholder="例: 金沢で寿司、直島のアート" aria-describedby="new-error">
+            <button type="submit" class="btn btn-primary">貼る</button>
+          </div>
+          <span class="field-error" id="new-error" role="alert"></span>
+        </form>
+        <ul class="notes wall-notes" id="wall" aria-label="まだ休みを決めていない付箋"></ul>
+        <div class="empty" id="wall-empty" hidden>
+          <p>まだ付箋がありません。思いつくまま、行きたい場所ややりたいことを貼ってみてください。</p>
+          <button type="button" class="btn btn-secondary btn-sm" id="add-sample">サンプルを入れる</button>
+        </div>
+        <p class="help hint-drag">付箋を押すと直せます。PC ではそのまま、スマホでは長押しで、休みの列へ引っぱれます。</p>
+      </section>
+
+      <!-- ===== いつ行く？ ===== -->
+      <section class="when" aria-labelledby="when-title">
+        <div class="section-head">
+          <h2 class="section-title" id="when-title">いつ行く？</h2>
+          <button type="button" class="btn btn-secondary btn-sm" id="add-lane">休みを足す</button>
+        </div>
+        <p class="help">祝日から、次の1年の連休（3日以上）を自動で並べています。有休や週末は「休みを足す」で加えられます。</p>
+        <div class="lanes" id="lanes" aria-label="休みの一覧"></div>
+        <p class="help hidden-info" id="hidden-info" hidden><span id="hidden-count"></span><button type="button" class="link" id="unhide-all">隠した休みを全部戻す</button></p>
+      </section>
+    </div>
+
+    <!-- ===== 行った旅 ===== -->
+    <section class="archive" id="archive-section" aria-labelledby="archive-title" hidden>
+      <h2 class="section-title" id="archive-title">行った旅</h2>
+      <ul class="archive-list" id="archive-list"></ul>
+    </section>
+
+    <!-- ===== 控え ===== -->
+    <section class="backup" aria-labelledby="backup-title">
+      <h2 class="section-title" id="backup-title">控え</h2>
+      <p class="help">付箋はこの端末のブラウザの中だけに保存されます。通信もアカウントもありません。機種変更の前に控えを書き出してください。</p>
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" id="export">控えを書き出す</button>
+        <label class="btn btn-secondary file-btn">控えを読み込む<input type="file" id="import-file" accept="application/json,.json"></label>
+        <button type="button" class="btn btn-danger" id="clear-all">全部消す</button>
+      </div>
+      <div class="confirm" id="clear-confirm" hidden>
+        <p>付箋・休み・行った旅をすべて消します。控えを書き出していない場合は元に戻せません。</p>
+        <div class="actions">
+          <button type="button" class="btn btn-danger" id="clear-yes">すべて消す</button>
+          <button type="button" class="btn btn-secondary" id="clear-no">やめる</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>旅箋 TABISEN — 付箋で決める旅の計画ボード</p>
+  </footer>
+</div>
+
+<!-- 付箋の編集シート -->
+<dialog class="sheet" id="editor" aria-labelledby="editor-title">
+  <form id="editor-form" method="dialog" novalidate>
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="editor-title">付箋を直す</h2>
+      <button type="button" class="btn btn-tertiary btn-sm" data-close>閉じる</button>
+    </div>
+    <div class="field">
+      <label for="ed-text">行きたい場所・やりたいこと<span class="req">（必須）</span></label>
+      <input class="input" id="ed-text" type="text" autocomplete="off" maxlength="60" aria-describedby="ed-error">
+      <span class="field-error" id="ed-error" role="alert"></span>
+    </div>
+    <div class="field">
+      <label for="ed-memo">メモ</label>
+      <textarea class="input" id="ed-memo" rows="2" maxlength="300" placeholder="例: 紅葉の時期に。宿は早めに"></textarea>
+    </div>
+    <div class="field">
+      <span class="label" id="ed-color-label">紙の色</span>
+      <div class="swatches" role="radiogroup" aria-labelledby="ed-color-label" id="ed-colors">
+        <label class="swatch is-yellow"><input type="radio" name="color" value="yellow"><span class="visually-hidden">黄</span></label>
+        <label class="swatch is-pink"><input type="radio" name="color" value="pink"><span class="visually-hidden">桃</span></label>
+        <label class="swatch is-mint"><input type="radio" name="color" value="mint"><span class="visually-hidden">緑</span></label>
+        <label class="swatch is-sky"><input type="radio" name="color" value="sky"><span class="visually-hidden">空</span></label>
+        <label class="swatch is-lavender"><input type="radio" name="color" value="lavender"><span class="visually-hidden">藤</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label" id="ed-stars-label">行きたい度</span>
+      <div class="segment seg-4" role="radiogroup" aria-labelledby="ed-stars-label">
+        <label><input type="radio" name="stars" value="0"><span>未定</span></label>
+        <label><input type="radio" name="stars" value="1"><span>★</span></label>
+        <label><input type="radio" name="stars" value="2"><span>★★</span></label>
+        <label><input type="radio" name="stars" value="3"><span>★★★</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label" id="ed-days-label">日数の目安</span>
+      <div class="segment seg-5" role="radiogroup" aria-labelledby="ed-days-label">
+        <label><input type="radio" name="days" value=""><span>未定</span></label>
+        <label><input type="radio" name="days" value="day"><span>日帰り</span></label>
+        <label><input type="radio" name="days" value="1"><span>1泊</span></label>
+        <label><input type="radio" name="days" value="2"><span>2泊</span></label>
+        <label><input type="radio" name="days" value="3plus"><span>3泊〜</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label" id="ed-lane-label">いつ行く？</span>
+      <div class="chips" role="radiogroup" aria-labelledby="ed-lane-label" id="ed-lanes"></div>
+    </div>
+    <div class="sheet-actions">
+      <button type="button" class="btn btn-danger" id="ed-delete">この付箋を消す</button>
+      <button type="submit" class="btn btn-primary">保存する</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 休みを足すシート -->
+<dialog class="sheet" id="lane-editor" aria-labelledby="lane-editor-title">
+  <form id="lane-form" method="dialog" novalidate>
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="lane-editor-title">休みを足す</h2>
+      <button type="button" class="btn btn-tertiary btn-sm" data-close>閉じる</button>
+    </div>
+    <div class="field">
+      <label for="ln-label">休みの名前<span class="req">（必須）</span></label>
+      <input class="input" id="ln-label" type="text" autocomplete="off" maxlength="40" placeholder="例: 有休をとって平日、10月最後の週末" aria-describedby="ln-error">
+      <span class="field-error" id="ln-error" role="alert"></span>
+    </div>
+    <div class="row-2">
+      <div class="field">
+        <label for="ln-start">はじまり</label>
+        <input class="input" id="ln-start" type="date">
+      </div>
+      <div class="field">
+        <label for="ln-end">おわり</label>
+        <input class="input" id="ln-end" type="date">
+      </div>
+    </div>
+    <p class="help">日付は空でもかまいません。空なら「日程は未定」の休みになります。</p>
+    <div class="sheet-actions">
+      <button type="submit" class="btn btn-primary">この休みを足す</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden>
+  <span class="toast-text" id="toast-text"></span>
+  <button type="button" class="btn btn-tertiary btn-sm toast-undo" id="toast-undo" hidden>取り消す</button>
+</div>
+<div class="note ghost" id="drag-ghost" aria-hidden="true" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
