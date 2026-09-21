@@ -1,7 +1,7 @@
 // 旅箋 TABISEN — オフラインでも開けるようにする小さな仕組み。
 // 自分のファイルはネットワーク優先、つながらないときだけ保存済みのものを出す。
-const VERSION = 'tabisen-v2';
-const SHELL = ['./', './index.html', './style.css', './app.js', './logic.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
+const VERSION = 'tabisen-v3';
+const SHELL = ['./', './index.html', './style.css', './app.js', './logic.js', './sync.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

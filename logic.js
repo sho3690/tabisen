@@ -99,10 +99,11 @@ export function laneTitle(lane, today) {
   }
   return { eyebrow: [...year, dowRange(lane.start, lane.end), `${lane.days}連休`].join('・'), title: formatRange(lane.start, lane.end), sub: lane.tag || lane.names.join('・') };
 }
-export const laneLabel = (lane, today) => { const t = laneTitle(lane, today); return t.eyebrow && t.eyebrow !== '日程は未定' ? `${t.title}（${t.eyebrow}）` : t.title; };
+
 
 // ---- 状態 ----
-export const emptyState = () => ({ version: 1, notes: [], customLanes: [], hiddenLanes: [], archive: [] });
+export const emptyState = () => ({ version: 1, notes: [], customLanes: [], hiddenLanes: [], hiddenLanesAt: 0, deleted: [] });
+const now = () => Date.now();
 let seq = 0;
 const uid = p => `${p}${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const randomRot = () => Math.round((Math.random() * 3 - 1.5) * 2) / 2;
@@ -116,18 +117,20 @@ function normalizeNote(n) {
     stars: [0, 1, 2, 3].includes(n.stars) ? n.stars : 0,
     days: Object.hasOwn(DAYS_LABEL, n.days || '') ? (n.days || '') : '',
     laneId: n.laneId ? String(n.laneId) : null,
-    decided: !!n.decided,
-    decidedLabel: n.decidedLabel ? String(n.decidedLabel) : '',
     rot: typeof n.rot === 'number' && n.rot >= -2 && n.rot <= 2 ? n.rot : randomRot(),
-    createdAt: n.createdAt || Date.now(),
+    createdAt: n.createdAt || now(),
+    updatedAt: n.updatedAt || n.createdAt || now(),
   };
 }
+const touch = n => ({ ...n, updatedAt: now() });
+// 消した記録（別の端末に「これは消した」と伝えるため）。半年より古いものは捨てる
+const remember = (deleted, id) => [...deleted.filter(d => d.id !== id && d.at > now() - 180 * 86400000), { id, at: now() }];
 
 export function buildLanes(state, today) {
   const todayKey = ymd(today);
   const hidden = new Set(state.hiddenLanes);
   const auto = holidayWindows(today).filter(w => !hidden.has(w.id));
-  const custom = state.customLanes.map(c => ({ ...c, kind: 'custom' })).filter(c => !c.end || c.end >= todayKey);
+  const custom = state.customLanes.map(c => ({ ...c, kind: 'custom' }));
   const dated = [...auto, ...custom.filter(c => c.start)].sort((a, b) => a.start.localeCompare(b.start));
   const undated = custom.filter(c => !c.start);
   return [...dated, ...undated];
@@ -139,36 +142,23 @@ export function addNote(state, fields) {
   return { ...state, notes: [...state.notes, note] };
 }
 export function updateNote(state, id, fields) {
-  return { ...state, notes: state.notes.map(n => (n.id === id ? normalizeNote({ ...n, ...fields, id }) : n)) };
+  return { ...state, notes: state.notes.map(n => (n.id === id ? touch(normalizeNote({ ...n, ...fields, id })) : n)) };
 }
 export function deleteNote(state, id) {
-  return { ...state, notes: state.notes.filter(n => n.id !== id) };
+  if (!state.notes.some(n => n.id === id)) return state;
+  return { ...state, notes: state.notes.filter(n => n.id !== id), deleted: remember(state.deleted, id) };
 }
 export function moveNote(state, id, laneId) {
-  return { ...state, notes: state.notes.map(n => (n.id === id ? { ...n, laneId: laneId || null, decided: false, decidedLabel: '' } : n)) };
-}
-export function decideNote(state, id, lane) {
-  const label = laneLabel(lane);
-  return {
-    ...state,
-    notes: state.notes.map(n => {
-      if (n.id === id) return { ...n, laneId: lane.id, decided: true, decidedLabel: label };
-      if (n.laneId === lane.id) return { ...n, laneId: null, decided: false, decidedLabel: '' };
-      return n;
-    }),
-  };
-}
-export function undecideNote(state, id) {
-  return { ...state, notes: state.notes.map(n => (n.id === id ? { ...n, decided: false, decidedLabel: '' } : n)) };
+  return { ...state, notes: state.notes.map(n => (n.id === id && n.laneId !== (laneId || null) ? touch({ ...n, laneId: laneId || null }) : n)) };
 }
 function releaseLane(state, laneId) {
-  return state.notes.map(n => (n.laneId === laneId ? { ...n, laneId: null, decided: false, decidedLabel: '' } : n));
+  return state.notes.map(n => (n.laneId === laneId ? touch({ ...n, laneId: null }) : n));
 }
 export function hideLane(state, laneId) {
   if (state.hiddenLanes.includes(laneId)) return state;
-  return { ...state, hiddenLanes: [...state.hiddenLanes, laneId], notes: releaseLane(state, laneId) };
+  return { ...state, hiddenLanes: [...state.hiddenLanes, laneId], hiddenLanesAt: now(), notes: releaseLane(state, laneId) };
 }
-export function unhideAll(state) { return { ...state, hiddenLanes: [] }; }
+export function unhideAll(state) { return { ...state, hiddenLanes: [], hiddenLanesAt: now() }; }
 // 名前か日付のどちらかがあれば足せる。名前が空なら日付がそのまま名前になる。
 export function addCustomLane(state, { label, start, end }) {
   const l = String(label || '').trim().slice(0, 40);
@@ -177,7 +167,7 @@ export function addCustomLane(state, { label, start, end }) {
   if (e && !s) s = e;
   if (s && e && e < s) [s, e] = [e, s];
   if (!l && !s) return state;
-  const lane = { id: uid('custom:'), label: l, start: s, end: e };
+  const lane = { id: uid('custom:'), label: l, start: s, end: e, updatedAt: now() };
   return { ...state, customLanes: [...state.customLanes, lane] };
 }
 // 同じ日程の（名前なしの）休みが既にあればそれを返す
@@ -186,32 +176,36 @@ export function findDateLane(state, start, end) {
   return state.customLanes.find(c => !c.label && c.start === start && c.end === e) || null;
 }
 export function removeCustomLane(state, laneId) {
-  return { ...state, customLanes: state.customLanes.filter(c => c.id !== laneId), notes: releaseLane(state, laneId) };
+  if (!state.customLanes.some(c => c.id === laneId)) return state;
+  return { ...state, customLanes: state.customLanes.filter(c => c.id !== laneId), notes: releaseLane(state, laneId), deleted: remember(state.deleted, laneId) };
 }
-// 過ぎた休みを片づける: 決定済みは「行った旅」へ、未決定は壁へ戻す。
+// 無くなった列（過ぎた連休・隠した連休）に貼ってあった付箋は Ideas へ戻す。
 export function expire(state, lanes) {
   const live = new Set(lanes.map(l => l.id));
-  const archive = [...state.archive];
-  const notes = [];
-  for (const n of state.notes) {
-    if (!n.laneId || live.has(n.laneId)) { notes.push(n); continue; }
-    if (n.decided) archive.push({ text: n.text, label: n.decidedLabel, start: n.laneId.startsWith('auto:') ? n.laneId.slice(5) : '' });
-    else notes.push({ ...n, laneId: null, decided: false, decidedLabel: '' });
-  }
-  const customLanes = state.customLanes.filter(c => live.has(c.id));
-  return { ...state, notes, archive, customLanes };
+  if (state.notes.every(n => !n.laneId || live.has(n.laneId))) return state;
+  return { ...state, notes: state.notes.map(n => (!n.laneId || live.has(n.laneId) ? n : touch({ ...n, laneId: null }))) };
 }
 
-export function decidedText(state, lanes) {
-  const lines = [];
-  for (const lane of lanes) {
-    const n = state.notes.find(x => x.decided && x.laneId === lane.id);
-    if (!n) continue;
-    const days = DAYS_LABEL[n.days] ? `（${DAYS_LABEL[n.days]}）` : '';
-    lines.push(`${laneLabel(lane)}　${n.text}${days}`);
-  }
-  return lines.join('\n');
+// ---- 同期の合流: 2つの端末の状態をひとつにする（順番を入れ替えても同じ結果になる） ----
+export function mergeStates(a, b) {
+  const delMap = new Map();
+  for (const d of [...(a.deleted || []), ...(b.deleted || [])]) if (!delMap.has(d.id) || delMap.get(d.id) < d.at) delMap.set(d.id, d.at);
+  const alive = x => !(delMap.has(x.id) && delMap.get(x.id) >= (x.updatedAt || 0));
+  const pick = (xa, xb) => ((xb.updatedAt || 0) > (xa.updatedAt || 0) ? xb : xa);
+  const mergeList = (la, lb) => {
+    const m = new Map();
+    for (const x of la) m.set(x.id, x);
+    for (const x of lb) m.set(x.id, m.has(x.id) ? pick(m.get(x.id), x) : x);
+    return [...m.values()].filter(alive);
+  };
+  const notes = mergeList(a.notes, b.notes).sort((x, y) => (x.createdAt || 0) - (y.createdAt || 0) || x.id.localeCompare(y.id));
+  const customLanes = mergeList(a.customLanes, b.customLanes).sort((x, y) => (x.updatedAt || 0) - (y.updatedAt || 0) || x.id.localeCompare(y.id));
+  const ha = a.hiddenLanesAt || 0, hb = b.hiddenLanesAt || 0;
+  const hiddenLanes = ha === hb ? [...new Set([...a.hiddenLanes, ...b.hiddenLanes])].sort() : (hb > ha ? b.hiddenLanes : a.hiddenLanes);
+  const deleted = [...delMap].map(([id, at]) => ({ id, at })).sort((x, y) => x.id.localeCompare(y.id));
+  return { version: 1, notes, customLanes, hiddenLanes, hiddenLanesAt: Math.max(ha, hb), deleted };
 }
+export const sameState = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export function parseImport(text) {
   const raw = JSON.parse(text);
@@ -220,8 +214,9 @@ export function parseImport(text) {
   return {
     version: 1,
     notes: raw.notes.map(normalizeNote).filter(n => n.text),
-    customLanes: arr(raw.customLanes).filter(c => c && c.id && (c.label || c.start)).map(c => ({ id: String(c.id), label: String(c.label || '').slice(0, 40), start: c.start || '', end: c.end || '' })),
+    customLanes: arr(raw.customLanes).filter(c => c && c.id && (c.label || c.start)).map(c => ({ id: String(c.id), label: String(c.label || '').slice(0, 40), start: c.start || '', end: c.end || '', updatedAt: Number(c.updatedAt) || 0 })),
     hiddenLanes: arr(raw.hiddenLanes).map(String),
-    archive: arr(raw.archive).filter(a => a && a.text).map(a => ({ text: String(a.text), label: String(a.label || ''), start: String(a.start || '') })),
+    hiddenLanesAt: Number(raw.hiddenLanesAt) || 0,
+    deleted: arr(raw.deleted).filter(d => d && d.id && d.at).map(d => ({ id: String(d.id), at: Number(d.at) })),
   };
 }

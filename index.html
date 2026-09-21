@@ -30,15 +30,6 @@
   </header>
 
   <main>
-    <!-- ===== Plans（決まったときだけ出る） ===== -->
-    <section class="decided" id="decided-section" aria-labelledby="decided-title" hidden>
-      <div class="section-head">
-        <h2 class="section-title" id="decided-title">Plans</h2>
-        <button type="button" class="btn btn-tertiary btn-sm" id="copy-decided">文面をコピー</button>
-      </div>
-      <ol class="decided-list" id="decided-list"></ol>
-    </section>
-
     <div class="board">
       <!-- ===== Ideas ===== -->
       <section class="wall" aria-labelledby="wall-title" data-drop="">
@@ -69,12 +60,6 @@
         <div class="lanes" id="lanes" aria-label="休みの一覧"></div>
       </section>
     </div>
-
-    <!-- ===== Past Trips ===== -->
-    <section class="archive" id="archive-section" aria-labelledby="archive-title" hidden>
-      <h2 class="section-title" id="archive-title">Past Trips</h2>
-      <ul class="archive-list" id="archive-list"></ul>
-    </section>
   </main>
 </div>
 
@@ -184,6 +169,38 @@
       <h2 class="sheet-title" id="settings-title">設定</h2>
       <button type="button" class="btn btn-tertiary btn-sm" data-close>閉じる</button>
     </div>
+    <section class="settings-group" aria-labelledby="settings-sync">
+      <h3 class="settings-label" id="settings-sync">同期</h3>
+      <div id="sync-off">
+        <p class="help">iPhone と Mac など、別の端末でも同じ付箋を見るには、あなたの GitHub の非公開リポジトリに保存します。通信先は GitHub だけです。</p>
+        <ol class="steps">
+          <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub でトークンを作る</a>（Repository access は tabisen-data だけ、Permissions は Contents を Read and write）</li>
+          <li>できたトークンを下に貼って「つなぐ」を押す</li>
+        </ol>
+        <form id="sync-form" novalidate>
+          <div class="field">
+            <label for="sync-repo">リポジトリ</label>
+            <input class="input" id="sync-repo" type="text" autocomplete="off" spellcheck="false" value="sho3690/tabisen-data">
+          </div>
+          <div class="field">
+            <label for="sync-token">トークン<span class="req">（必須）</span></label>
+            <input class="input" id="sync-token" type="password" autocomplete="off" placeholder="github_pat_…" aria-describedby="sync-error">
+            <span class="field-error" id="sync-error" role="alert"></span>
+          </div>
+          <button type="submit" class="btn btn-primary" id="sync-connect">つなぐ</button>
+        </form>
+      </div>
+      <div id="sync-on" hidden>
+        <p class="help" id="sync-target"></p>
+        <p class="sync-status" id="sync-status" aria-live="polite"></p>
+        <div class="actions">
+          <button type="button" class="btn btn-secondary" id="sync-now">今すぐ同期</button>
+          <button type="button" class="btn btn-secondary" id="sync-link">別の端末につなぐリンクをコピー</button>
+          <button type="button" class="btn btn-danger" id="sync-disconnect">つなぐのをやめる</button>
+        </div>
+        <p class="help">リンクにはトークンが入っています。AirDrop やメモなど、自分の端末にだけ送ってください。</p>
+      </div>
+    </section>
     <section class="settings-group" aria-labelledby="settings-backup">
       <h3 class="settings-label" id="settings-backup">控え</h3>
       <p class="help">付箋はこの端末のブラウザの中だけに保存されます。通信もアカウントもありません。機種変更の前に控えを書き出してください。</p>
@@ -200,7 +217,7 @@
     </section>
     <section class="settings-group" aria-labelledby="settings-clear">
       <h3 class="settings-label" id="settings-clear">すべて消す</h3>
-      <p class="help">付箋・休み・行った旅をすべて消します。控えを書き出していない場合は元に戻せません。</p>
+      <p class="help">付箋と休みをすべて消します。同期をつないでいる場合は、他の端末からも消えます。</p>
       <button type="button" class="btn btn-danger" id="clear-all">全部消す</button>
       <div class="confirm" id="clear-confirm" hidden>
         <p>本当にすべて消しますか？</p>
@@ -212,7 +229,7 @@
     </section>
     <section class="settings-group" aria-labelledby="settings-about">
       <h3 class="settings-label" id="settings-about">このアプリについて</h3>
-      <p class="help">行き先を選ぶのではなく、休みに貼る。Ideas の付箋を Holidays の列へ動かし、「これで決定」を押すと Plans に並びます。</p>
+      <p class="help">行き先を選ぶのではなく、休みに貼る。Ideas の付箋を Holidays の列へ動かすと、それがそのまま計画になります。</p>
       <p class="help">Holidays には、祝日から次の1年の連休（3日以上）を自動で並べています。好きな日程は「＋ 日付を選ぶ」で足せます。列の右上の × で隠せます。</p>
       <p class="help">付箋は押すと直せます。PC ではドラッグ、スマホでは長押しで列へ動かせます。</p>
     </section>

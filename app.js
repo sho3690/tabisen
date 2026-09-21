@@ -1,5 +1,6 @@
 // 旅箋 TABISEN — 画面の組み立てと操作。計算は logic.js に置く。
 import * as L from './logic.js';
+import { createSync, takeLinkConfig } from './sync.js';
 
 const KEY = 'tabisen.v1';
 const $ = id => document.getElementById(id);
@@ -29,26 +30,24 @@ function commit(next, { undoable = false, toast = '' } = {}) {
   state = next;
   save();
   render();
+  sync.schedule();
   if (toast) showToast(toast, undoable);
 }
+// 同期で別の端末の状態を取り込む（こちらからは送り返さない）
+function applyState(next) { state = next; save(); render(); }
 
 // ---- 描画 ----
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const starsHtml = n => n ? `<span class="note-stars" aria-label="行きたい度 ${n}">${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span></span>` : '<span></span>';
 
-function noteHtml(n, ctx) {
+function noteHtml(n) {
   const days = L.DAYS_LABEL[n.days] || '';
-  const decided = n.decided && ctx === 'lane';
-  return `<li class="note is-${n.color}${decided ? ' is-decided' : ''}" data-id="${n.id}" style="--rot:${n.rot}deg">
-    ${decided ? '<span class="stamp" aria-hidden="true">決定</span>' : ''}
-    <button type="button" class="note-body" data-action="edit" aria-label="${esc(n.text)}${decided ? '（決定）' : ''}。押すと直せます">
+  return `<li class="note is-${n.color}" data-id="${n.id}" style="--rot:${n.rot}deg">
+    <button type="button" class="note-body" data-action="edit" aria-label="${esc(n.text)}。押すと直せます">
       <span class="note-text">${esc(n.text)}</span>
       ${n.memo ? `<span class="note-memo">${esc(n.memo)}</span>` : ''}
       <span class="note-meta">${starsHtml(n.stars)}<span>${esc(days)}</span></span>
     </button>
-    ${ctx === 'lane' ? `<span class="note-actions">${decided
-      ? '<button type="button" class="note-decide" data-action="undecide">決定を取り消す</button>'
-      : '<button type="button" class="note-decide" data-action="decide">これで決定</button>'}</span>` : ''}
   </li>`;
 }
 
@@ -56,18 +55,15 @@ const X_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="tru
 function laneHtml(lane) {
   const t = L.laneTitle(lane, today);
   const notes = state.notes.filter(n => n.laneId === lane.id);
-  const winner = notes.find(n => n.decided);
-  const rest = notes.filter(n => !n.decided);
   const key = L.ymd(today);
   const isNow = !!(lane.start && lane.end && lane.start <= key && lane.end >= key);
-  const flag = winner ? '<span class="lane-flag">決定ずみ</span>' : isNow ? '<span class="lane-flag">いまの休み</span>' : '';
+  const isPast = !!(lane.end && lane.end < key);
+  const flag = isNow ? '<span class="lane-flag">いまの休み</span>' : isPast ? '<span class="lane-flag">終わった日程</span>' : '';
   const hide = lane.kind === 'auto'
     ? `<button type="button" class="lane-hide" data-lane-action="hide" aria-label="この休みを隠す" title="この休みを隠す">${X_ICON}</button>`
     : `<button type="button" class="lane-hide" data-lane-action="remove" aria-label="この休みを消す" title="この休みを消す">${X_ICON}</button>`;
-  const body = notes.length
-    ? (winner ? noteHtml(winner, 'lane') : '') + rest.map(n => noteHtml(n, 'lane')).join('')
-    : '<li class="lane-empty">付箋をここへ</li>';
-  return `<section class="lane${isNow ? ' is-now' : ''}${winner ? ' is-decided' : ''}" data-drop="${lane.id}" aria-label="${esc(t.title)} ${esc(t.eyebrow)}">
+  const body = notes.length ? notes.map(noteHtml).join('') : '<li class="lane-empty">付箋をここへ</li>';
+  return `<section class="lane${isNow ? ' is-now' : ''}" data-drop="${lane.id}" aria-label="${esc(t.title)} ${esc(t.eyebrow)}">
     <header class="lane-head">
       <p class="lane-eyebrow">${flag}${esc(t.eyebrow)}</p>
       <h3 class="lane-title">${esc(t.title)}</h3>
@@ -81,26 +77,13 @@ function laneHtml(lane) {
 function render() {
   lanes = L.buildLanes(state, today);
   const expired = L.expire(state, lanes);
-  if (JSON.stringify(expired) !== JSON.stringify(state)) { state = expired; save(); }
+  if (expired !== state) { state = expired; save(); sync.schedule(); }
 
   $('today-label').textContent = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日(${DOW[today.getDay()]})`;
 
-  // 決まった旅
-  const decidedItems = [];
-  for (const lane of lanes) {
-    const n = state.notes.find(x => x.decided && x.laneId === lane.id);
-    if (!n) continue;
-    const t = L.laneTitle(lane, today);
-    const days = L.DAYS_LABEL[n.days];
-    const sub = [t.eyebrow, t.sub].filter(Boolean).join('・');
-    decidedItems.push(`<li class="decided-item"><span class="decided-when"><span class="decided-title">${esc(t.title)}</span><span class="decided-sub">${esc(sub)}</span></span><span class="decided-what">${esc(n.text)}${days ? `<span class="decided-days">${esc(days)}</span>` : ''}</span></li>`);
-  }
-  $('decided-list').innerHTML = decidedItems.join('');
-  $('decided-section').hidden = decidedItems.length === 0;
-
-  // 壁
+  // Ideas
   const wallNotes = state.notes.filter(n => !n.laneId);
-  $('wall').innerHTML = wallNotes.map(n => noteHtml(n, 'wall')).join('');
+  $('wall').innerHTML = wallNotes.map(noteHtml).join('');
   $('wall-count').textContent = wallNotes.length ? String(wallNotes.length) : '';
   $('wall-empty').hidden = state.notes.length > 0;
 
@@ -112,11 +95,6 @@ function render() {
   const hidden = state.hiddenLanes.length;
   $('hidden-group').hidden = hidden === 0;
   $('hidden-count').textContent = hidden ? `× で隠した休みが ${hidden}件あります。戻すと Holidays に再び並びます。` : '';
-
-  // 行った旅
-  $('archive-section').hidden = state.archive.length === 0;
-  $('archive-list').innerHTML = [...state.archive].sort((a, b) => b.start.localeCompare(a.start))
-    .map(a => `<li class="archive-item"><span class="when">${esc(a.label)}</span><span>${esc(a.text)}</span></li>`).join('');
 }
 
 // ---- 通知と取り消し ----
@@ -175,14 +153,6 @@ document.addEventListener('click', e => {
     const id = li.dataset.id;
     const action = btn.dataset.action;
     if (action === 'edit') openEditor(id);
-    if (action === 'decide') {
-      const lane = lanes.find(l => l.id === li.closest('[data-drop]').dataset.drop);
-      const note = state.notes.find(n => n.id === id);
-      if (!lane || !note) return;
-      const returned = state.notes.filter(n => n.laneId === lane.id && n.id !== id).length;
-      commit(L.decideNote(state, id, lane), { undoable: true, toast: `${L.laneTitle(lane, today).title} は「${note.text}」に決定${returned ? `。他の${returned}枚は Ideas へ戻しました` : ''}` });
-    }
-    if (action === 'undecide') commit(L.undecideNote(state, id), { toast: '決定を取り消しました' });
     return;
   }
   const laneBtn = e.target.closest('[data-lane-action]');
@@ -278,11 +248,6 @@ $('open-settings').addEventListener('click', () => { $('clear-confirm').hidden =
 $('import-btn').addEventListener('click', () => $('import-file').click());
 
 // ---- コピー・控え ----
-$('copy-decided').addEventListener('click', async () => {
-  const text = L.decidedText(state, lanes);
-  try { await navigator.clipboard.writeText(text); showToast('決まった旅の文面をコピーしました'); }
-  catch (e) { showToast('コピーできませんでした。手で選んでコピーしてください'); }
-});
 $('export').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -380,7 +345,7 @@ document.addEventListener('pointerdown', e => {
   const body = e.target.closest('.note-body');
   if (!body || e.button !== 0) return;
   const li = body.closest('.note');
-  if (!li || li.classList.contains('is-decided') || li.classList.contains('ghost')) return;
+  if (!li || li.classList.contains('ghost')) return;
   drag = { id: li.dataset.id, el: li, startX: e.clientX, startY: e.clientY, active: false, touch: e.pointerType !== 'mouse', target: null };
   if (drag.touch) drag.timer = setTimeout(() => startDrag(e.clientX, e.clientY), 320);
 });
@@ -401,8 +366,57 @@ document.addEventListener('pointercancel', () => endDrag(false));
 document.addEventListener('touchmove', e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', e => { if (e.target.closest('.note')) e.preventDefault(); });
 
+// ---- 同期 ----
+const sync = createSync({
+  getState: () => state,
+  applyState: next => { applyState(next); },
+  onStatus: st => {
+    const on = st.state !== 'off';
+    $('sync-off').hidden = on; $('sync-on').hidden = !on;
+    if (on) $('sync-target').textContent = `つないでいる先: ${sync.config.repo}`;
+    const el = $('sync-status');
+    const time = st.at ? new Date(st.at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const text = st.state === 'syncing' ? '同期しています…'
+      : st.state === 'ok' ? `最後の同期: ${time}`
+      : st.state === 'offline' ? st.message
+      : st.state === 'error' ? `同期できませんでした: ${st.message}`
+      : st.at ? `最後の同期: ${time}` : 'まだ同期していません';
+    el.textContent = text;
+    el.className = `sync-status${st.state === 'error' ? ' is-error' : st.state === 'ok' ? ' is-ok' : ''}`;
+    if (st.state === 'ok' && st.pulled) showToast('別の端末の変更を取り込みました');
+    if (st.state === 'error') showToast(`同期できませんでした: ${st.message}`);
+  },
+});
+$('sync-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('sync-connect'); const err = $('sync-error');
+  err.textContent = ''; $('sync-token').removeAttribute('aria-invalid');
+  btn.disabled = true; btn.textContent = '確かめています…';
+  try {
+    await sync.connect({ repo: $('sync-repo').value, token: $('sync-token').value });
+    $('sync-token').value = '';
+    showToast('同期をつなぎました');
+  } catch (ex) {
+    err.textContent = ex.message; $('sync-token').setAttribute('aria-invalid', 'true');
+  } finally { btn.disabled = false; btn.textContent = 'つなぐ'; }
+});
+$('sync-now').addEventListener('click', () => sync.sync());
+$('sync-disconnect').addEventListener('click', () => { sync.disconnect(); showToast('同期をやめました。トークンはこの端末から消しました'); });
+$('sync-link').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(sync.link()); showToast('リンクをコピーしました。自分の別の端末で開いてください'); }
+  catch (e) { showToast('コピーできませんでした'); }
+});
+
 // ---- 起動 ----
 render();
+{
+  const linked = takeLinkConfig();
+  if (linked) {
+    sync.connect(linked).then(() => showToast('同期をつなぎました')).catch(e => { $('settings').showModal(); $('sync-error').textContent = e.message; });
+  } else {
+    sync.start();
+  }
+}
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   const t = todayDate();
