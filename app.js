@@ -411,3 +411,5 @@ document.addEventListener('visibilitychange', () => {
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+// ブラウザに「この保存領域は消さないで」と頼む（容量不足のときの自動削除を防ぐ。対応していない端末では何もしない）
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
