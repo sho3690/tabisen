@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   jpHolidays, holidayWindows, formatRange, buildLanes, laneTitle, decidedText,
   emptyState, addNote, updateNote, deleteNote, moveNote, decideNote, undecideNote,
-  hideLane, addCustomLane, removeCustomLane, expire, parseImport,
+  hideLane, addCustomLane, removeCustomLane, findDateLane, expire, parseImport,
 } from '../logic.js';
 
 const d = s => { const [y, m, dd] = s.split('-').map(Number); return new Date(y, m - 1, dd); };
@@ -154,4 +154,21 @@ test('parseImport: 壊れたデータは受け付けない', () => {
   assert.equal(ok.notes[0].text, '金沢');
   assert.equal(ok.notes[0].stars, 0);
   assert.deepEqual(ok.customLanes, []);
+});
+
+test('日付だけの休み: 名前が空なら日付が名前になる。同じ日程は再利用', () => {
+  let s = emptyState();
+  s = addCustomLane(s, { start: '2026-09-23', end: '2026-09-26' });
+  s = addCustomLane(s, { start: '2026-09-23' });           // おわりが空 → 1日
+  s = addCustomLane(s, { label: '', start: '', end: '' });  // 何も無い → 無視
+  assert.equal(s.customLanes.length, 2);
+  const lanes = buildLanes(s, d('2026-09-21'));
+  const t = laneTitle(lanes.find(l => l.id === s.customLanes[0].id));
+  assert.equal(t.title, '9/23(水)〜26(土)');
+  assert.equal(t.sub, '4日間・自分で選んだ日程');
+  assert.equal(findDateLane(s, '2026-09-23', '2026-09-26').id, s.customLanes[0].id);
+  assert.equal(findDateLane(s, '2026-09-23', '').id, s.customLanes[1].id);
+  assert.equal(findDateLane(s, '2026-10-01', '2026-10-02'), null);
+  const ok = parseImport(JSON.stringify({ version: 1, notes: [], customLanes: [{ id: 'c1', label: '', start: '2026-09-23', end: '2026-09-26' }] }));
+  assert.equal(ok.customLanes.length, 1);
 });

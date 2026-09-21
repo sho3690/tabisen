@@ -22,21 +22,24 @@
 <body>
 <div class="app">
   <header class="app-header">
-    <h1 class="app-title">旅箋<small>TABISEN</small></h1>
-    <p class="app-date" id="today-label"></p>
+    <h1 class="brand"><span class="brand-title">旅箋</span><span class="brand-sub">TABISEN</span></h1>
+    <div class="app-tools">
+      <p class="app-date" id="today-label"></p>
+      <button type="button" class="btn btn-secondary btn-sm" id="open-settings" aria-haspopup="dialog">
+        <svg class="icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        設定
+      </button>
+    </div>
   </header>
 
   <main>
-    <p class="lead">行き先を選ぶのではなく、<strong>休みに貼る</strong>。頭の中の候補を付箋にして、次の連休に貼っていくと、いつ・どこへ行くかが決まります。</p>
-
-    <!-- ===== 決まった旅 ===== -->
-    <section class="decided" aria-labelledby="decided-title">
+    <!-- ===== 決まった旅（決まったときだけ出る） ===== -->
+    <section class="decided" id="decided-section" aria-labelledby="decided-title" hidden>
       <div class="section-head">
         <h2 class="section-title" id="decided-title">決まった旅</h2>
-        <button type="button" class="btn btn-tertiary btn-sm" id="copy-decided" hidden>文面をコピー</button>
+        <button type="button" class="btn btn-tertiary btn-sm" id="copy-decided">文面をコピー</button>
       </div>
       <ol class="decided-list" id="decided-list"></ol>
-      <p class="help" id="decided-empty">まだありません。休みの列に付箋を貼って「これで決定」を押すと、ここに並びます。</p>
     </section>
 
     <div class="board">
@@ -66,9 +69,8 @@
       <section class="when" aria-labelledby="when-title">
         <div class="section-head">
           <h2 class="section-title" id="when-title">いつ行く？</h2>
-          <button type="button" class="btn btn-secondary btn-sm" id="add-lane">休みを足す</button>
         </div>
-        <p class="help">祝日から、次の1年の連休（3日以上）を自動で並べています。有休や週末は「休みを足す」で加えられます。</p>
+        <p class="help">祝日から、次の1年の連休（3日以上）を自動で並べています。好きな日程は「日付を選んで足す」で加えられます。</p>
         <div class="lanes" id="lanes" aria-label="休みの一覧"></div>
         <p class="help hidden-info" id="hidden-info" hidden><span id="hidden-count"></span><button type="button" class="link" id="unhide-all">隠した休みを全部戻す</button></p>
       </section>
@@ -78,24 +80,6 @@
     <section class="archive" id="archive-section" aria-labelledby="archive-title" hidden>
       <h2 class="section-title" id="archive-title">行った旅</h2>
       <ul class="archive-list" id="archive-list"></ul>
-    </section>
-
-    <!-- ===== 控え ===== -->
-    <section class="backup" aria-labelledby="backup-title">
-      <h2 class="section-title" id="backup-title">控え</h2>
-      <p class="help">付箋はこの端末のブラウザの中だけに保存されます。通信もアカウントもありません。機種変更の前に控えを書き出してください。</p>
-      <div class="actions">
-        <button type="button" class="btn btn-secondary" id="export">控えを書き出す</button>
-        <label class="btn btn-secondary file-btn">控えを読み込む<input type="file" id="import-file" accept="application/json,.json"></label>
-        <button type="button" class="btn btn-danger" id="clear-all">全部消す</button>
-      </div>
-      <div class="confirm" id="clear-confirm" hidden>
-        <p>付箋・休み・行った旅をすべて消します。控えを書き出していない場合は元に戻せません。</p>
-        <div class="actions">
-          <button type="button" class="btn btn-danger" id="clear-yes">すべて消す</button>
-          <button type="button" class="btn btn-secondary" id="clear-no">やめる</button>
-        </div>
-      </div>
     </section>
   </main>
 
@@ -152,6 +136,20 @@
     <div class="field">
       <span class="label" id="ed-lane-label">いつ行く？</span>
       <div class="chips" role="radiogroup" aria-labelledby="ed-lane-label" id="ed-lanes"></div>
+      <div class="ed-dates" id="ed-dates" hidden>
+        <div class="row-2">
+          <div class="field">
+            <label for="ed-start">はじまり<span class="req">（必須）</span></label>
+            <input class="input" id="ed-start" type="date" aria-describedby="ed-dates-error">
+          </div>
+          <div class="field">
+            <label for="ed-end">おわり</label>
+            <input class="input" id="ed-end" type="date">
+          </div>
+        </div>
+        <span class="field-hint">この日程の休みを新しく作って、そこに貼ります。おわりが空なら1日だけ。</span>
+        <span class="field-error" id="ed-dates-error" role="alert"></span>
+      </div>
     </div>
     <div class="sheet-actions">
       <button type="button" class="btn btn-danger" id="ed-delete">この付箋を消す</button>
@@ -164,29 +162,64 @@
 <dialog class="sheet" id="lane-editor" aria-labelledby="lane-editor-title">
   <form id="lane-form" method="dialog" novalidate>
     <div class="sheet-head">
-      <h2 class="sheet-title" id="lane-editor-title">休みを足す</h2>
+      <h2 class="sheet-title" id="lane-editor-title">日付を選んで休みを足す</h2>
       <button type="button" class="btn btn-tertiary btn-sm" data-close>閉じる</button>
-    </div>
-    <div class="field">
-      <label for="ln-label">休みの名前<span class="req">（必須）</span></label>
-      <input class="input" id="ln-label" type="text" autocomplete="off" maxlength="40" placeholder="例: 有休をとって平日、10月最後の週末" aria-describedby="ln-error">
-      <span class="field-error" id="ln-error" role="alert"></span>
     </div>
     <div class="row-2">
       <div class="field">
         <label for="ln-start">はじまり</label>
-        <input class="input" id="ln-start" type="date">
+        <input class="input" id="ln-start" type="date" aria-describedby="ln-error">
       </div>
       <div class="field">
         <label for="ln-end">おわり</label>
         <input class="input" id="ln-end" type="date">
       </div>
     </div>
-    <p class="help">日付は空でもかまいません。空なら「日程は未定」の休みになります。</p>
+    <div class="field">
+      <label for="ln-label">休みの名前<span class="req">（任意）</span></label>
+      <input class="input" id="ln-label" type="text" autocomplete="off" maxlength="40" placeholder="例: 有休をとって平日">
+      <span class="field-hint">空なら日付がそのまま名前になります。日付を空にして名前だけの休み（日程は未定）も作れます。</span>
+    </div>
+    <span class="field-error" id="ln-error" role="alert"></span>
     <div class="sheet-actions">
       <button type="submit" class="btn btn-primary">この休みを足す</button>
     </div>
   </form>
+</dialog>
+
+<!-- 設定シート -->
+<dialog class="sheet" id="settings" aria-labelledby="settings-title">
+  <div class="sheet-body">
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="settings-title">設定</h2>
+      <button type="button" class="btn btn-tertiary btn-sm" data-close>閉じる</button>
+    </div>
+    <section class="settings-group" aria-labelledby="settings-backup">
+      <h3 class="settings-label" id="settings-backup">控え</h3>
+      <p class="help">付箋はこの端末のブラウザの中だけに保存されます。通信もアカウントもありません。機種変更の前に控えを書き出してください。</p>
+      <div class="actions">
+        <button type="button" class="btn btn-secondary" id="export">控えを書き出す</button>
+        <button type="button" class="btn btn-secondary" id="import-btn">控えを読み込む</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </div>
+    </section>
+    <section class="settings-group" aria-labelledby="settings-clear">
+      <h3 class="settings-label" id="settings-clear">すべて消す</h3>
+      <p class="help">付箋・休み・行った旅をすべて消します。控えを書き出していない場合は元に戻せません。</p>
+      <button type="button" class="btn btn-danger" id="clear-all">全部消す</button>
+      <div class="confirm" id="clear-confirm" hidden>
+        <p>本当にすべて消しますか？</p>
+        <div class="actions">
+          <button type="button" class="btn btn-danger" id="clear-yes">すべて消す</button>
+          <button type="button" class="btn btn-secondary" id="clear-no">やめる</button>
+        </div>
+      </div>
+    </section>
+    <section class="settings-group" aria-labelledby="settings-about">
+      <h3 class="settings-label" id="settings-about">このアプリについて</h3>
+      <p class="help">旅箋 TABISEN。行き先を選ぶのではなく、休みに貼る。付箋を次の連休に貼っていくと、いつ・どこへ行くかが決まります。</p>
+    </section>
+  </div>
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden>

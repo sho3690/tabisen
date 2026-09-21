@@ -90,6 +90,7 @@ export function laneTitle(lane, today) {
   if (lane.kind === 'custom') {
     if (!lane.start) return { title: lane.label, sub: '日程は未定' };
     const n = Math.round((parseYmd(lane.end) - parseYmd(lane.start)) / 86400000) + 1;
+    if (!lane.label) return { title: formatRange(lane.start, lane.end), sub: `${yearNote}${n}日間・自分で選んだ日程` };
     return { title: lane.label, sub: `${yearNote}${formatRange(lane.start, lane.end)}・${n}日間` };
   }
   const sub = lane.tag ? `${lane.tag}・${lane.days}連休` : [`${lane.days}連休`, ...lane.names].join('・');
@@ -164,15 +165,21 @@ export function hideLane(state, laneId) {
   return { ...state, hiddenLanes: [...state.hiddenLanes, laneId], notes: releaseLane(state, laneId) };
 }
 export function unhideAll(state) { return { ...state, hiddenLanes: [] }; }
+// 名前か日付のどちらかがあれば足せる。名前が空なら日付がそのまま名前になる。
 export function addCustomLane(state, { label, start, end }) {
   const l = String(label || '').trim().slice(0, 40);
-  if (!l) return state;
   let s = start || '', e = end || '';
   if (s && !e) e = s;
   if (e && !s) s = e;
   if (s && e && e < s) [s, e] = [e, s];
+  if (!l && !s) return state;
   const lane = { id: uid('custom:'), label: l, start: s, end: e };
   return { ...state, customLanes: [...state.customLanes, lane] };
+}
+// 同じ日程の（名前なしの）休みが既にあればそれを返す
+export function findDateLane(state, start, end) {
+  const e = end || start;
+  return state.customLanes.find(c => !c.label && c.start === start && c.end === e) || null;
 }
 export function removeCustomLane(state, laneId) {
   return { ...state, customLanes: state.customLanes.filter(c => c.id !== laneId), notes: releaseLane(state, laneId) };
@@ -209,7 +216,7 @@ export function parseImport(text) {
   return {
     version: 1,
     notes: raw.notes.map(normalizeNote).filter(n => n.text),
-    customLanes: arr(raw.customLanes).filter(c => c && c.id && c.label).map(c => ({ id: String(c.id), label: String(c.label).slice(0, 40), start: c.start || '', end: c.end || '' })),
+    customLanes: arr(raw.customLanes).filter(c => c && c.id && (c.label || c.start)).map(c => ({ id: String(c.id), label: String(c.label || '').slice(0, 40), start: c.start || '', end: c.end || '' })),
     hiddenLanes: arr(raw.hiddenLanes).map(String),
     archive: arr(raw.archive).filter(a => a && a.text).map(a => ({ text: String(a.text), label: String(a.label || ''), start: String(a.start || '') })),
   };

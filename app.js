@@ -88,8 +88,7 @@ function render() {
     decidedItems.push(`<li class="decided-item"><span class="decided-when">${esc(t.title)}<span class="decided-sub">${esc(t.sub)}</span></span><span class="decided-what">${esc(n.text)}${days ? `<span class="decided-days">${esc(days)}</span>` : ''}</span></li>`);
   }
   $('decided-list').innerHTML = decidedItems.join('');
-  $('decided-empty').hidden = decidedItems.length > 0;
-  $('copy-decided').hidden = decidedItems.length === 0;
+  $('decided-section').hidden = decidedItems.length === 0;
 
   // 壁
   const wallNotes = state.notes.filter(n => !n.laneId);
@@ -100,7 +99,8 @@ function render() {
   // 休みの列（横スクロール位置は保つ）
   const lanesEl = $('lanes');
   const sl = lanesEl.scrollLeft;
-  lanesEl.innerHTML = lanes.map(laneHtml).join('');
+  const addCard = `<button type="button" class="lane-add" id="lane-add-card" aria-haspopup="dialog"><span class="lane-add-plus" aria-hidden="true">＋</span><span class="lane-add-title">日付を選んで足す</span><span class="lane-add-sub">有休・週末・好きな日程</span></button>`;
+  lanesEl.innerHTML = addCard + lanes.map(laneHtml).join('');
   lanesEl.scrollLeft = sl;
   const hidden = state.hiddenLanes.length;
   $('hidden-info').hidden = hidden === 0;
@@ -205,7 +205,9 @@ function openEditor(id) {
     const t = L.laneTitle(lane, today);
     chips.push(`<label class="chip"><input type="radio" name="lane" value="${lane.id}"${n.laneId === lane.id ? ' checked' : ''}>${esc(t.title)}<small>${esc(t.sub)}</small></label>`);
   }
+  chips.push('<label class="chip"><input type="radio" name="lane" value="__dates__">日付を選んで貼る<small>好きな日程で新しい休みを作る</small></label>');
   $('ed-lanes').innerHTML = chips.join('');
+  $('ed-dates').hidden = true; $('ed-start').value = ''; $('ed-end').value = ''; $('ed-dates-error').textContent = ''; $('ed-start').removeAttribute('aria-invalid');
   $('editor').showModal();
   $('ed-text').focus();
 }
@@ -217,7 +219,14 @@ $('editor-form').addEventListener('submit', e => {
   if (!text) { $('ed-error').textContent = '行きたい場所ややりたいことを書いてください'; $('ed-text').setAttribute('aria-invalid', 'true'); $('ed-text').focus(); return; }
   const f = new FormData(e.target);
   let s = L.updateNote(state, editingId, { text, memo: $('ed-memo').value, color: f.get('color'), stars: Number(f.get('stars')), days: f.get('days') });
-  const laneId = f.get('lane') || null;
+  let laneId = f.get('lane') || null;
+  if (laneId === '__dates__') {
+    const start = $('ed-start').value, end = $('ed-end').value || $('ed-start').value;
+    if (!start) { $('ed-dates-error').textContent = 'はじまりの日付を選んでください'; $('ed-start').setAttribute('aria-invalid', 'true'); $('ed-start').focus(); return; }
+    const existing = L.findDateLane(s, start, end);
+    if (existing) laneId = existing.id;
+    else { s = L.addCustomLane(s, { label: '', start, end }); laneId = s.customLanes.at(-1).id; }
+  }
   if (laneId !== n.laneId) s = L.moveNote(s, editingId, laneId);
   $('editor').close();
   commit(s);
@@ -233,18 +242,31 @@ for (const dlg of document.querySelectorAll('dialog.sheet')) {
 }
 
 // ---- 休みを足す ----
-$('add-lane').addEventListener('click', () => {
-  $('ln-label').value = ''; $('ln-start').value = ''; $('ln-end').value = ''; $('ln-error').textContent = ''; $('ln-label').removeAttribute('aria-invalid');
+function openLaneEditor() {
+  $('ln-label').value = ''; $('ln-start').value = ''; $('ln-end').value = ''; $('ln-error').textContent = ''; $('ln-start').removeAttribute('aria-invalid');
   $('lane-editor').showModal();
-  $('ln-label').focus();
-});
+  $('ln-start').focus();
+}
+$('lanes').addEventListener('click', e => { if (e.target.closest('.lane-add')) openLaneEditor(); });
 $('lane-form').addEventListener('submit', e => {
   e.preventDefault();
   const label = $('ln-label').value.trim();
-  if (!label) { $('ln-error').textContent = '休みの名前を書いてください（例: 有休をとって平日）'; $('ln-label').setAttribute('aria-invalid', 'true'); $('ln-label').focus(); return; }
+  const start = $('ln-start').value, end = $('ln-end').value;
+  if (!label && !start && !end) { $('ln-error').textContent = '日付か名前のどちらかを入れてください'; $('ln-start').setAttribute('aria-invalid', 'true'); $('ln-start').focus(); return; }
+  const next = L.addCustomLane(state, { label, start, end });
   $('lane-editor').close();
-  commit(L.addCustomLane(state, { label, start: $('ln-start').value, end: $('ln-end').value }), { toast: `「${label}」を足しました` });
+  const lane = next.customLanes.at(-1);
+  commit(next, { toast: `${L.laneTitle({ ...lane, kind: 'custom' }).title} を足しました` });
 });
+$('ed-lanes').addEventListener('change', e => {
+  if (e.target.name !== 'lane') return;
+  $('ed-dates').hidden = e.target.value !== '__dates__';
+  if (!$('ed-dates').hidden) $('ed-start').focus();
+});
+
+// ---- 設定シート ----
+$('open-settings').addEventListener('click', () => { $('clear-confirm').hidden = true; $('settings').showModal(); });
+$('import-btn').addEventListener('click', () => $('import-file').click());
 
 // ---- コピー・控え ----
 $('copy-decided').addEventListener('click', async () => {
@@ -273,7 +295,7 @@ $('import-file').addEventListener('change', e => {
 });
 $('clear-all').addEventListener('click', () => { $('clear-confirm').hidden = false; $('clear-yes').focus(); });
 $('clear-no').addEventListener('click', () => { $('clear-confirm').hidden = true; $('clear-all').focus(); });
-$('clear-yes').addEventListener('click', () => { $('clear-confirm').hidden = true; commit(L.emptyState(), { undoable: true, toast: 'すべて消しました' }); });
+$('clear-yes').addEventListener('click', () => { $('clear-confirm').hidden = true; $('settings').close(); commit(L.emptyState(), { undoable: true, toast: 'すべて消しました' }); });
 
 // ---- ドラッグ（PC はそのまま、タッチは長押しで始める） ----
 let drag = null;
